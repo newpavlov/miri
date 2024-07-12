@@ -105,7 +105,34 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
                 // Now, `result` is the value we return back to the program.
                 this.write_scalar(Scalar::from_target_isize(result, this), dest)?;
             }
-            "pread" | "pread64" => {
+            #[cfg(unix)]
+            "pread" => {
+                let [fd, buf, count, offset] = this.check_shim(abi, Abi::C { unwind: false }, link_name, args)?;
+                let fd = this.read_scalar(fd)?.to_i32()?;
+                let buf = this.read_pointer(buf)?;
+                let count = this.read_target_usize(count)?;
+                let offset = this.read_scalar(offset)?.to_int(this.libc_ty_layout("off_t").size)?;
+                let result = this.pread(fd, buf, count, offset)?;
+                this.write_scalar(Scalar::from_target_isize(result, this), dest)?;
+            }
+            #[cfg(unix)]
+            "pwrite" => {
+                let [fd, buf, n, offset] = this.check_shim(abi, Abi::C { unwind: false }, link_name, args)?;
+                let fd = this.read_scalar(fd)?.to_i32()?;
+                let buf = this.read_pointer(buf)?;
+                let count = this.read_target_usize(n)?;
+                let offset = this.read_scalar(offset)?.to_int(this.libc_ty_layout("off_t").size)?;
+                trace!("Called pwrite({:?}, {:?}, {:?}, {:?})", fd, buf, count, offset);
+                let result = this.pwrite(fd, buf, count, offset)?;
+                // Now, `result` is the value we return back to the program.
+                this.write_scalar(Scalar::from_target_isize(result, this), dest)?;
+            }
+            #[cfg(any(
+                all(target_os = "linux", not(target_env = "musl")),
+                target_os = "android",
+                target_os = "hurd"
+            ))]
+            "pread64" => {
                 let [fd, buf, count, offset] = this.check_shim(abi, Abi::C { unwind: false }, link_name, args)?;
                 let fd = this.read_scalar(fd)?.to_i32()?;
                 let buf = this.read_pointer(buf)?;
@@ -114,13 +141,18 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
                 let result = this.pread(fd, buf, count, offset)?;
                 this.write_scalar(Scalar::from_target_isize(result, this), dest)?;
             }
-            "pwrite" | "pwrite64" => {
+            #[cfg(any(
+                all(target_os = "linux", not(target_env = "musl")),
+                target_os = "android",
+                target_os = "hurd"
+            ))]
+            "pwrite64" => {
                 let [fd, buf, n, offset] = this.check_shim(abi, Abi::C { unwind: false }, link_name, args)?;
                 let fd = this.read_scalar(fd)?.to_i32()?;
                 let buf = this.read_pointer(buf)?;
                 let count = this.read_target_usize(n)?;
                 let offset = this.read_scalar(offset)?.to_int(this.libc_ty_layout("off64_t").size)?;
-                trace!("Called pwrite({:?}, {:?}, {:?}, {:?})", fd, buf, count, offset);
+                trace!("Called pwrite64({:?}, {:?}, {:?}, {:?})", fd, buf, count, offset);
                 let result = this.pwrite(fd, buf, count, offset)?;
                 // Now, `result` is the value we return back to the program.
                 this.write_scalar(Scalar::from_target_isize(result, this), dest)?;
