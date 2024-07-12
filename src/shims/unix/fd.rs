@@ -499,7 +499,7 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
 
         // Isolation check is done via `FileDescriptor` trait.
 
-        trace!("Reading from FD {}, size {}", fd, count);
+        trace!("Reading from FD {}, size {}, offset {}", fd, count, offset);
 
         // Check that the *entire* buffer is actually valid memory.
         this.check_ptr_access(buf, Size::from_bytes(count), CheckInAllocMsg::MemoryAccessTest)?;
@@ -513,11 +513,11 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
 
         // We temporarily dup the FD to be able to retain mutable access to `this`.
         let Some(file_descriptor) = this.machine.fds.dup(fd) else {
-            trace!("read: FD not found");
+            trace!("pread: FD not found");
             return this.fd_not_found();
         };
 
-        trace!("read: FD mapped to {:?}", file_descriptor);
+        trace!("pread: FD mapped to {:?}", file_descriptor);
         // We want to read at most `count` bytes. We are sure that `count` is not negative
         // because it was a target's `usize`. Also we are sure that its smaller than
         // `usize::MAX` because it is bounded by the host's `isize`.
