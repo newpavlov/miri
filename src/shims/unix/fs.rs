@@ -8,6 +8,9 @@ use std::io::{self, ErrorKind, IsTerminal, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+#[cfg(unix)]
+use std::os::unix::fs::FileExt;
+
 use rustc_data_structures::fx::FxHashMap;
 use rustc_target::abi::Size;
 
@@ -47,6 +50,30 @@ impl FileDescription for FileHandle {
     ) -> InterpResult<'tcx, io::Result<usize>> {
         assert!(communicate_allowed, "isolation should have prevented even opening a file");
         Ok(self.file.write(bytes))
+    }
+
+    #[cfg(unix)]
+    fn pread<'tcx>(
+        &mut self,
+        communicate_allowed: bool,
+        bytes: &mut [u8],
+        offset: u64,
+        _ecx: &mut MiriInterpCx<'tcx>,
+    ) -> InterpResult<'tcx, io::Result<usize>> {
+        assert!(communicate_allowed, "isolation should have prevented even opening a file");
+        Ok(self.file.read_at(bytes, offset))
+    }
+
+    #[cfg(unix)]
+    fn pwrite<'tcx>(
+        &mut self,
+        communicate_allowed: bool,
+        bytes: &[u8],
+        offset: u64,
+        _ecx: &mut MiriInterpCx<'tcx>,
+    ) -> InterpResult<'tcx, io::Result<usize>> {
+        assert!(communicate_allowed, "isolation should have prevented even opening a file");
+        Ok(self.file.write_at(bytes, offset))
     }
 
     fn seek<'tcx>(
