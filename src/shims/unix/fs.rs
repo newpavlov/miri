@@ -16,7 +16,7 @@ use crate::shims::unix::*;
 use crate::*;
 use shims::time::system_time_to_duration;
 
-use self::fd::FileDescriptor;
+use self::fd::{FileDescriptor, FlockOp};
 
 #[derive(Debug)]
 struct FileHandle {
@@ -78,6 +78,48 @@ impl FileDescription for FileHandle {
             // https://github.com/rust-lang/miri/issues/999#issuecomment-568920439
             // for a deeper discussion.
             Ok(Ok(()))
+        }
+    }
+
+    fn flock<'tcx>(
+        &self,
+        communicate_allowed: bool,
+        op: FlockOp,
+    ) -> InterpResult<'tcx, io::Result<()>> {
+        assert!(communicate_allowed, "isolation should have prevented even opening a file");
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+
+            // Transform `op` into host's flags
+            let mut host_op = 0;
+            if op.shared {
+                host_op |= libc::LOCK_SH;
+            }
+            if op.exclusive {
+                host_op |= libc::LOCK_EX;
+            }
+            if op.nonblocking {
+                host_op |= libc::LOCK_NB;
+            }
+            if op.unlock {
+                host_op |= libc::LOCK_UN;
+            }
+
+            let fd = self.file.as_raw_fd();
+            let ret = unsafe { libc::flock(fd, host_op) };
+            let res = match ret {
+                0 => Ok(()),
+                -1 => Err(io::Error::last_os_error()),
+                ret => panic!("Unexpected return value from flock: {ret}"),
+            };
+            Ok(res)
+        }
+
+        #[cfg(not(unix))]
+        {
+            let _ = op;
+            throw_unsup_format!("flock emulation is not supported on non-UNIX hosts");
         }
     }
 

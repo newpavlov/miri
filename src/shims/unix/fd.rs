@@ -53,6 +53,14 @@ pub trait FileDescription: std::fmt::Debug + Any {
         throw_unsup_format!("cannot close {}", self.name());
     }
 
+    fn flock<'tcx>(
+        &self,
+        _communicate_allowed: bool,
+        _op: FlockOp,
+    ) -> InterpResult<'tcx, io::Result<()>> {
+        throw_unsup_format!("cannot flock {}", self.name());
+    }
+
     fn is_tty(&self, _communicate_allowed: bool) -> bool {
         // Most FDs are not tty's and the consequence of a wrong `false` are minor,
         // so we use a default impl here.
@@ -299,6 +307,49 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
         Ok(new_fd)
     }
 
+    fn flock(&mut self, fd: i32, op: i32) -> InterpResult<'tcx, Scalar> {
+        let this = self.eval_context_mut();
+        let Some(file_descriptor) = this.machine.fds.get(fd) else {
+            return Ok(Scalar::from_i32(this.fd_not_found()?));
+        };
+
+        // We need to check that there aren't unsupported options in `op`. For this we try to
+        // reproduce the content of `op` in the `mirror` variable using only the supported options.
+        let mut flags = FlockOp::default();
+        let mut mirror = 0;
+
+        let lock_sh = this.eval_libc_i32("LOCK_SH");
+        if op & lock_sh != 0 {
+            flags.shared = true;
+            mirror |= lock_sh;
+        }
+        let lock_ex = this.eval_libc_i32("LOCK_EX");
+        if op & lock_ex != 0 {
+            flags.exclusive = true;
+            mirror |= lock_ex;
+        }
+        let lock_nb = this.eval_libc_i32("LOCK_NB");
+        if op & lock_nb != 0 {
+            flags.nonblocking = true;
+            mirror |= lock_nb;
+        }
+        let lock_un = this.eval_libc_i32("LOCK_UN");
+        if op & lock_un != 0 {
+            flags.unlock = true;
+            mirror |= lock_un;
+        }
+
+        if mirror != op {
+            throw_unsup_format!("unsupported flags {:#x}", op & !mirror);
+        }
+
+        let result = file_descriptor.flock(this.machine.communicate(), flags)?;
+        drop(file_descriptor);
+        // return `0` if close is successful
+        let result = result.map(|()| 0i32);
+        Ok(Scalar::from_i32(this.try_unwrap_io_result(result)?))
+    }
+
     fn fcntl(&mut self, args: &[OpTy<'tcx>]) -> InterpResult<'tcx, i32> {
         let this = self.eval_context_mut();
 
@@ -463,4 +514,12 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
 
         this.try_unwrap_io_result(result)
     }
+}
+
+#[derive(Default)]
+pub(crate) struct FlockOp {
+    pub shared: bool,
+    pub exclusive: bool,
+    pub nonblocking: bool,
+    pub unlock: bool,
 }
