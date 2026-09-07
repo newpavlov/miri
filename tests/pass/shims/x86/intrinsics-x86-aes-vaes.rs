@@ -86,11 +86,11 @@ fn test_vaes256() {
         "101112131415161718191A1B1C1D1E1F"
     );
     let expected_k = hex!(
-        "AD4F49655DC9D53B9DA0B41C98D4B404"
+        "3E20891643D63F40AB9858F40DF473EB"
         "34FAD322139140B611EC284682B04712"
     );
     let expected_b = hex!(
-        "565E4627035031F6A3EC0C6432395001"
+        "BD12A330F63C66D9220E0A15AE34C1A3"
         "55AE92B160B72676D796AB343539B3F6"
     );
 
@@ -117,13 +117,13 @@ fn test_vaes512() {
         "303132333435363738393A3B3C3D3E3F"
     );
     let expected_k = hex!(
-        "AD4F49655DC9D53B9DA0B41C98D4B404"
+        "3E20891643D63F40AB9858F40DF473EB"
         "34FAD322139140B611EC284682B04712"
         "7234EC1DF69957C127300335BB1E1F3F"
         "118378FC9B461ED7CC4BCE7342A23269"
     );
     let expected_b = hex!(
-        "565E4627035031F6A3EC0C6432395001"
+        "BD12A330F63C66D9220E0A15AE34C1A3"
         "55AE92B160B72676D796AB343539B3F6"
         "BCE5B43E431A685CD7BDC0393D6C7FDD"
         "41F0604A1F8F16027483C220A8BDDD1F"
@@ -170,7 +170,7 @@ unsafe impl AsMm for [u8; 64] {
     type Mm = __m512i;
 }
 
-// Vendored from the `hex-literal crate
+// Vendored from the `hex-literal` crate
 mod hex_literal {
     const fn next_hex_char(string: &[u8], mut pos: usize) -> Option<(u8, usize)> {
         while pos < string.len() {
