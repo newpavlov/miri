@@ -8,6 +8,7 @@ use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 
+#[test]
 fn main() {
     if is_x86_feature_detected!("aes") {
         unsafe {
@@ -39,6 +40,24 @@ macro_rules! hex {
     }};
 }
 
+const START_K: [u8; 64] = hex!(
+    "000102030405060708090A0B0C0D0E0F"
+    "101112131415161718191A1B1C1D1E1F"
+    "202122232425262728292A2B2C2D2E2F"
+    "303132333435363738393A3B3C3D3E3F"
+);
+const EXPECTED_K: [u8; 64] = hex!(
+    "3E20891643D63F40AB9858F40DF473EB"
+    "34FAD322139140B611EC284682B04712"
+    "7234EC1DF69957C127300335BB1E1F3F"
+    "118378FC9B461ED7CC4BCE7342A23269"
+);
+const EXPECTED_B: [u8; 64] = hex!(
+    "BD12A330F63C66D9220E0A15AE34C1A3"
+    "55AE92B160B72676D796AB343539B3F6"
+    "BCE5B43E431A685CD7BDC0393D6C7FDD"
+    "41F0604A1F8F16027483C220A8BDDD1F"
+);
 const N: u64 = 1000;
 
 // Test `_mm_aeskeygenassist_si128` and `_mm_aesimc_si128`
@@ -61,75 +80,57 @@ fn test_aes_keygen() {
 /// `_mm_aesdec_si128`, and `_mm_aesdeclast_si128`
 #[target_feature(enable = "aes")]
 fn test_aes() {
-    let k = hex!("000102030405060708090A0B0C0D0E0F");
-    let expected_k = hex!("3E20891643D63F40AB9858F40DF473EB");
-    let expected_b = hex!("BD12A330F63C66D9220E0A15AE34C1A3");
+    let (ks, tail) = START_K.as_chunks::<16>();
+    assert!(tail.is_empty());
+    let (expected_ks, tail) = EXPECTED_K.as_chunks::<16>();
+    assert!(tail.is_empty());
+    let (expected_bs, tail) = EXPECTED_B.as_chunks::<16>();
+    assert!(tail.is_empty());
 
-    let mut k = k.as_mm();
-    let mut b = k;
-    for _ in 0..N {
-        b = _mm_aesenc_si128(b, k);
-        k = _mm_aesenclast_si128(k, b);
-        b = _mm_aesdec_si128(b, k);
-        k = _mm_aesdeclast_si128(k, b);
+    for i in 0..ks.len() {
+        let mut k = ks[i].as_mm();
+        let mut b = k;
+        for _ in 0..N {
+            b = _mm_aesenc_si128(b, k);
+            k = _mm_aesenclast_si128(k, b);
+            b = _mm_aesdec_si128(b, k);
+            k = _mm_aesdeclast_si128(k, b);
+        }
+        assert!(expected_ks[i].is_eq(k));
+        assert!(expected_bs[i].is_eq(b));
     }
-    assert!(expected_k.is_eq(k));
-    assert!(expected_b.is_eq(b));
 }
 
 /// Test `_mm256aesenc_epi128`, `_mm256_aesenclast_epi128`,
 /// `_mm256_aesdec_epi128`, and `_mm256_aesdeclast_epi128`
 #[target_feature(enable = "vaes")]
 fn test_vaes256() {
-    let k = hex!(
-        "000102030405060708090A0B0C0D0E0F"
-        "101112131415161718191A1B1C1D1E1F"
-    );
-    let expected_k = hex!(
-        "3E20891643D63F40AB9858F40DF473EB"
-        "34FAD322139140B611EC284682B04712"
-    );
-    let expected_b = hex!(
-        "BD12A330F63C66D9220E0A15AE34C1A3"
-        "55AE92B160B72676D796AB343539B3F6"
-    );
+    let (ks, tail) = START_K.as_chunks::<32>();
+    assert!(tail.is_empty());
+    let (expected_ks, tail) = EXPECTED_K.as_chunks::<32>();
+    assert!(tail.is_empty());
+    let (expected_bs, tail) = EXPECTED_B.as_chunks::<32>();
+    assert!(tail.is_empty());
 
-    let mut k = k.as_mm();
-    let mut b = k;
-    for _ in 0..N {
-        b = _mm256_aesenc_epi128(b, k);
-        k = _mm256_aesenclast_epi128(k, b);
-        b = _mm256_aesdec_epi128(b, k);
-        k = _mm256_aesdeclast_epi128(k, b);
+    for i in 0..ks.len() {
+        let mut k = ks[i].as_mm();
+        let mut b = k;
+        for _ in 0..N {
+            b = _mm256_aesenc_epi128(b, k);
+            k = _mm256_aesenclast_epi128(k, b);
+            b = _mm256_aesdec_epi128(b, k);
+            k = _mm256_aesdeclast_epi128(k, b);
+        }
+        assert!(expected_ks[i].is_eq(k));
+        assert!(expected_bs[i].is_eq(b));
     }
-    assert!(expected_k.is_eq(k));
-    assert!(expected_b.is_eq(b));
 }
 
 /// Test `_mm512aesenc_epi128`, `_mm512_aesenclast_epi128`,
 /// `_mm512_aesdec_epi128`, and `_mm512_aesdeclast_epi128`
 #[target_feature(enable = "avx512f,vaes")]
 fn test_vaes512() {
-    let k = hex!(
-        "000102030405060708090A0B0C0D0E0F"
-        "101112131415161718191A1B1C1D1E1F"
-        "202122232425262728292A2B2C2D2E2F"
-        "303132333435363738393A3B3C3D3E3F"
-    );
-    let expected_k = hex!(
-        "3E20891643D63F40AB9858F40DF473EB"
-        "34FAD322139140B611EC284682B04712"
-        "7234EC1DF69957C127300335BB1E1F3F"
-        "118378FC9B461ED7CC4BCE7342A23269"
-    );
-    let expected_b = hex!(
-        "BD12A330F63C66D9220E0A15AE34C1A3"
-        "55AE92B160B72676D796AB343539B3F6"
-        "BCE5B43E431A685CD7BDC0393D6C7FDD"
-        "41F0604A1F8F16027483C220A8BDDD1F"
-    );
-
-    let mut k = k.as_mm();
+    let mut k = START_K.as_mm();
     let mut b = k;
     for _ in 0..N {
         b = _mm512_aesenc_epi128(b, k);
@@ -137,8 +138,8 @@ fn test_vaes512() {
         b = _mm512_aesdec_epi128(b, k);
         k = _mm512_aesdeclast_epi128(k, b);
     }
-    assert!(expected_k.is_eq(k));
-    assert!(expected_b.is_eq(b));
+    assert!(EXPECTED_K.is_eq(k));
+    assert!(EXPECTED_B.is_eq(b));
 }
 
 /// Trait for casting between `[u8; 16/32/64]` and `__m128/256/512i` types
